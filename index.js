@@ -58,7 +58,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
       date: action.date,
       item: action.data.card.name,
       progress: action.data.progress,
-      text: "✓ " + action.data.checkItem.name,
+      done: "✓ " + action.data.checkItem.name,
     };
   }
   function populateCommentCard(action) {
@@ -68,7 +68,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
       item: action.data.card.name,
       progress: action.data.progress,
       date: action.date,
-      text: "- " + action.data.text,
+      done: (action.data.text.startsWith("-") ? "" : "- ") + action.data.text,
     };
   }
 
@@ -105,7 +105,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
     ...actionsInThisWeek
       .filter(filterCommentCardItems)
       .map(populateCommentCard),
-  ];
+  ].sort(sortByItemName);
 
   const projects = groupBy(actions, "project");
   const result = Object.keys(projects).reduce((acc, k) => {
@@ -123,10 +123,10 @@ function parseJsonToCsv(jsonFile, csvFile) {
         acc2[k2] = {
           progress: itemGroup[k2][0].progress,
           member: itemGroup[k2][0].member,
-          text: [],
+          done: [],
         };
 
-      acc2[k2].text = itemGroup[k2].map(it => it.text);
+      acc2[k2].done = itemGroup[k2].map(it => it.done);
       return acc2;
     }, {});
 
@@ -135,12 +135,22 @@ function parseJsonToCsv(jsonFile, csvFile) {
   }, {});
 
   console.table(
-    actions.map(action => ({ ...action, text: action.text.substr(0, 20) }))
+    actions.map(action => ({ ...action, done: action.done.substr(0, 40) }))
   );
 
   jsonexport(actions, (err, csv) => {
     if (!err) fs.writeFileSync(csvFile, csv);
   });
+}
+
+function sortByItemName(a, b) {
+  if (a.item.toUpperCase() < b.item.toUpperCase()) {
+    return -1;
+  }
+  if (a.item.toUpperCase() > b.item.toUpperCase()) {
+    return 1;
+  }
+  return 0;
 }
 
 parseJsonToCsv("./projects.json", "./projects.csv");
