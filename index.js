@@ -105,7 +105,9 @@ function parseJsonToCsv(jsonFile, csvFile) {
     ...actionsInThisWeek
       .filter(filterCommentCardItems)
       .map(populateCommentCard),
-  ].sort(sortByItemName);
+  ]
+    .map(action => ({ ...action, date: formatDate(action.date) }))
+    .sort(sortByItemName);
 
   const projects = groupBy(actions, "project");
   const result = Object.keys(projects).reduce((acc, k) => {
@@ -151,6 +153,10 @@ function sortByItemName(a, b) {
     return 1;
   }
   return 0;
+}
+
+function formatDate(dateString) {
+  return dateString.substr(0, 10);
 }
 
 parseJsonToCsv("./projects.json", "./projects.csv");
