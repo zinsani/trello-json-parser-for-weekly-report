@@ -19,8 +19,11 @@ function parseJsonToCsv(jsonFile, csvFile) {
 
   function mapListTitleToActon(data) {
     return action => {
-      const listId = data.cards.find(c => c.id === action.data.card.id).idList;
-      const listName = data.lists.find(l => l.id === listId).name;
+      const listId =
+        data.cards.find(c => c.id === action.data.card.id)?.idList ?? null;
+      const listName = listId
+        ? data.lists.find(l => l.id === listId).name
+        : `no list found (${action.data.card.name})`;
       return { ...action, data: { ...action.data, list: listName } };
     };
   }
