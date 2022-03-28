@@ -16,6 +16,11 @@ function parseJsonToCsv(jsonFile, csvFile) {
     today.getMonth(),
     today.getDate() + 1
   );
+  const todayDate = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
 
   function mapListTitleToActon(data) {
     return action => {
@@ -72,6 +77,9 @@ function parseJsonToCsv(jsonFile, csvFile) {
       progress: action.data.progress,
       date: action.date,
       done: (action.data.text.startsWith("-") ? "" : "- ") + action.data.text,
+      todo: action.data.todo
+        ? (action.data.todo.startsWith("-") ? "" : "- ") + action.data.todo
+        : "",
     };
   }
 
@@ -101,6 +109,32 @@ function parseJsonToCsv(jsonFile, csvFile) {
     .map(mapListTitleToActon(data))
     .map(mapChecklistProgress(data));
 
+  const mergeChecklistWithCard = checklist => {
+    const card = data.cards.find(c => c.id === checklist.idCard);
+    const listName = card.listId
+      ? data.lists.find(l => l.id === listId).name
+      : `no list found (${card.name})`;
+
+    return {
+      project: listName,
+      member: card.idMembers
+        .map(idMember => data.members.find(m => m.id === idMember).fullName)
+        .join(", "),
+      item: card.name,
+      date: todayDate.toISOString(),
+    };
+  };
+
+  const todoList = data.checklists
+    .filter(cl => cl.name.toLowerCase().replace(" ", "") === "todo")
+    .map(cl => ({
+      ...mergeChecklistWithCard(cl),
+      todo: cl.checkItems
+        .filter(c => c.state !== "complete")
+        .map(c => ` - ${c.name}`)
+        .join("\n"),
+    }));
+
   const actions = [
     ...actionsInThisWeek
       .filter(filterForCheckCompletedItems)
@@ -108,6 +142,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
     ...actionsInThisWeek
       .filter(filterCommentCardItems)
       .map(populateCommentCard),
+    ...todoList,
   ]
     .map(action => ({ ...action, date: formatDate(action.date) }))
     .sort(sortByItemName);
@@ -140,7 +175,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
   }, {});
 
   console.table(
-    actions.map(action => ({ ...action, done: action.done.substr(0, 40) }))
+    actions.map(action => ({ ...action, done: action.done?.substr(0, 40) }))
   );
 
   jsonexport(actions, (err, csv) => {
