@@ -111,8 +111,8 @@ function parseJsonToCsv(jsonFile, csvFile) {
 
   const mergeChecklistWithCard = checklist => {
     const card = data.cards.find(c => c.id === checklist.idCard);
-    const listName = card.listId
-      ? data.lists.find(l => l.id === listId).name
+    const listName = card.idList
+      ? data.lists.find(l => l.id === card.idList).name
       : `no list found (${card.name})`;
 
     return {
