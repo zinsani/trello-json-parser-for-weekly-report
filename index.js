@@ -1,7 +1,7 @@
 const fs = require("fs");
 const jsonexport = require("jsonexport");
 
-function parseJsonToCsv(jsonFile, csvFile) {
+function parseJsonToActions(jsonFile, offsetDay) {
   const rawdata = fs.readFileSync(jsonFile);
   const data = JSON.parse(rawdata);
 
@@ -9,7 +9,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
   const startDate = new Date(
     today.getFullYear(),
     today.getMonth(),
-    today.getDate() - 7
+    today.getDate() - offsetDay
   );
   const endDate = new Date(
     today.getFullYear(),
@@ -59,6 +59,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
   function filterCommentCardItems(action) {
     return action.type === "commentCard";
   }
+
   function populateCheckCompleted(action) {
     return {
       project: action.data.list,
@@ -69,6 +70,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
       done: "✓ " + action.data.checkItem.name,
     };
   }
+
   function populateCommentCard(action) {
     return {
       project: action.data.list,
@@ -77,9 +79,6 @@ function parseJsonToCsv(jsonFile, csvFile) {
       progress: action.data.progress,
       date: action.date,
       done: (action.data.text.startsWith("-") ? "" : "- ") + action.data.text,
-      todo: action.data.todo
-        ? (action.data.todo.startsWith("-") ? "" : "- ") + action.data.todo
-        : "",
     };
   }
 
@@ -106,8 +105,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
   const actionsInThisWeek = data.actions
     .filter(a => a.data.card)
     .filter(filterDateIn(startDate, endDate))
-    .map(mapListTitleToActon(data))
-    .map(mapChecklistProgress(data));
+    .map(mapListTitleToActon(data));
 
   const mergeChecklistWithCard = checklist => {
     const card = data.cards.find(c => c.id === checklist.idCard);
@@ -133,10 +131,12 @@ function parseJsonToCsv(jsonFile, csvFile) {
         .filter(c => c.state !== "complete")
         .map(c => ` - ${c.name}`)
         .join("\n"),
-    }));
+    }))
+    .filter(({ todo }) => !!todo);
 
   const actions = [
     ...actionsInThisWeek
+      .map(mapChecklistProgress(data))
       .filter(filterForCheckCompletedItems)
       .map(populateCheckCompleted),
     ...actionsInThisWeek
@@ -178,9 +178,7 @@ function parseJsonToCsv(jsonFile, csvFile) {
     actions.map(action => ({ ...action, done: action.done?.substr(0, 40) }))
   );
 
-  jsonexport(actions, (err, csv) => {
-    if (!err) fs.writeFileSync(csvFile, csv);
-  });
+  return actions;
 }
 
 function sortByItemName(a, b) {
@@ -197,5 +195,26 @@ function formatDate(dateString) {
   return dateString.substr(0, 10);
 }
 
-parseJsonToCsv("./projects.json", "./projects.csv");
-parseJsonToCsv("./rnd.json", "./rnd.csv");
+function writeJsonToCsv(actions, csvFile) {
+  const options = {
+    headers: ["project", "member", "item", "progress", "date", "done", "todo"],
+  };
+
+  jsonexport(actions, options, (err, csv) => {
+    if (!err) fs.writeFileSync(csvFile, csv);
+  });
+}
+
+const readline = require("readline").createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
+  const od = offsetDate ? Number(offsetDate) : 7;
+  const projects = parseJsonToActions("./projects.json", od);
+  const rnd = parseJsonToActions("./rnd.json", od);
+  writeJsonToCsv([...projects, ...rnd], "./output.csv");
+
+  readline.close();
+});
