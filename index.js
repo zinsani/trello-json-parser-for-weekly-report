@@ -105,7 +105,8 @@ function parseJsonToActions(jsonFile, offsetDay) {
   const actionsInThisWeek = data.actions
     .filter(a => a.data.card)
     .filter(filterDateIn(startDate, endDate))
-    .map(mapListTitleToActon(data));
+    .map(mapListTitleToActon(data))
+    .map(mapChecklistProgress(data));
 
   const mergeChecklistWithCard = checklist => {
     const card = data.cards.find(c => c.id === checklist.idCard);
@@ -124,19 +125,19 @@ function parseJsonToActions(jsonFile, offsetDay) {
   };
 
   const todoList = data.checklists
-    .filter(cl => cl.name.toLowerCase().replace(" ", "") === "todo")
+    .filter(cl => cl.name.toLowerCase().replace(" ", "").startsWith("todo"))
     .map(cl => ({
       ...mergeChecklistWithCard(cl),
       todo: cl.checkItems
         .filter(c => c.state !== "complete")
-        .map(c => ` - ${c.name}`)
+        .filter(c => !c.name.startsWith("----"))
+        .map(c => ` ≥ ${c.name}`)
         .join("\n"),
     }))
     .filter(({ todo }) => !!todo);
 
   const actions = [
     ...actionsInThisWeek
-      .map(mapChecklistProgress(data))
       .filter(filterForCheckCompletedItems)
       .map(populateCheckCompleted),
     ...actionsInThisWeek
