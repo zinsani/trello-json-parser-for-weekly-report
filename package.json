@@ -9,7 +9,9 @@
   "author": "zinsani@gmail.com",
   "license": "ISC",
   "dependencies": {
+    "axios": "^0.27.2",
     "console.table": "^0.10.0",
+    "dotenv": "^16.0.1",
     "jsonexport": "^3.2.0"
   }
 }
