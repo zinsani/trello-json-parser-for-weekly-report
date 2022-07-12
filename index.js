@@ -26,7 +26,7 @@ function formatDate(dateString) {
 
 function writeJsonToCsv(actions, csvFile) {
   const options = {
-    headers: ["project", "member", "item", "progress", "date", "done", "todo"],
+    headers: ["project", "member", "item", "progress", "date", "done", "todo"]
   };
 
   jsonexport(actions, options, (err, csv) => {
@@ -36,7 +36,7 @@ function writeJsonToCsv(actions, csvFile) {
 
 const readline = require("readline").createInterface({
   input: process.stdin,
-  output: process.stdout,
+  output: process.stdout
 });
 
 readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
@@ -72,18 +72,26 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
   axios
     .get(`${url}/members/me/boards?fields=name,url&` + sufix)
     .then(async res => {
-      console.log("all boards", res.data);
+      console.log(
+        "all boards",
+        res.data.map(x => x.name)
+      );
 
       const boardData = res.data.filter(b =>
         ["newmedia.projects", "newmedia.r&d"].includes(b.name.toLowerCase())
       );
 
-      console.log("boardData ", boardData);
+      console.log(
+        "boardData ",
+        boardData.map(x => x.name)
+      );
 
       const allTodoLists = [];
       const allActionLists = [];
+      console.log("=============================");
+      console.log("Getting todolists");
       for (const { name, id } of boardData) {
-        console.log("fetching all cards of board", name);
+        console.log("fetching all cards of board ", name);
         try {
           const { data: allCards } = await axios.get(
             `${url}/boards/${id}/cards?filter=open&${sufix}`
@@ -96,10 +104,16 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
             const { data: checklists } = await axios.get(
               `${url}/cards/${card.id}/checklists?${sufix}`
             );
+
+            console.log("checklists of card", card.name, checklists);
+
             const matchingCheckLists = checklists.filter(cl =>
               cl.name.toLowerCase().replace(" ", "").startsWith("todo")
             );
-            if (!matchingCheckLists.length) continue;
+            if (!matchingCheckLists.length) {
+              console.log("no todo-list found");
+              continue;
+            }
             if (
               matchingCheckLists
                 .map(
@@ -108,8 +122,10 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                     0
                 )
                 .filter(x => !!x).length === 0
-            )
+            ) {
+              console.log("no completed checklist found");
               continue;
+            }
 
             const { data: list } = await axios.get(
               `${url}/lists/${card.idList}?${sufix}`
@@ -123,20 +139,21 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                 project: list.name,
                 item: card.name,
                 member: members.map(m => m.fullName).join(", "),
-                date: formatDate(startDate.toISOString()),
+                date: formatDate(today.toISOString()),
                 todo:
-                  `${cl.name.replace(/^\s?todo\s?/i, "\n")}` +
+                  `[${cl.name.replace(/^\s?todo\s?/i, "\n")}]\n` +
                   cl.checkItems
                     .filter(c => c.state !== "complete")
                     .filter(c => !c.name.startsWith("---"))
                     .filter(c => !c.name.startsWith("==="))
                     .map(c => `→ ${c.name}`)
-                    .join("\n"),
+                    .join("\n")
               }))
               .filter(({ todo }) => !!todo);
+
             todosPerCards = [
               ...todosPerCards,
-              ...todos.filter(t => t.todo.length > 1),
+              ...todos.filter(t => t.todo.length > 1)
             ];
           }
           console.log("todosPerCards", todosPerCards);
@@ -146,9 +163,13 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
           console.error(e);
         }
 
+        console.log("=============================");
+        console.log("Getting actions");
         try {
           const { data: actionsFetched } = await axios.get(
-            `${url}/boards/${id}/actions?${sufix}`
+            `${url}/boards/${id}/actions?filter=${actionTypes.join(
+              ","
+            )}&${sufix}`
           );
           const actionLists = [];
           for (const action of (await actionsFetched)
@@ -156,8 +177,14 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
             .filter(a =>
               a.type === "updateCheckItemStateOnCard"
                 ? a.data.checkItem.state === "complete"
-                : actionTypes.includes(a.type)
+                : true
             )) {
+            console.log(
+              "parsing action of type",
+              action.type,
+              " and of card ",
+              action.data.card.name
+            );
             const card = action.data.card;
             const { data: list } = await axios.get(
               `${url}/cards/${card.id}/list?${sufix}`
@@ -168,6 +195,11 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
             const { data: member } = await axios.get(
               `${url}/actions/${action.id}/memberCreator?${sufix}`
             );
+
+            if (!checklist) {
+              console.log("no checklist found");
+              continue;
+            }
 
             const mainCheckList = checklist.find(c =>
               c.name.toLowerCase().startsWith("main")
@@ -193,7 +225,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               item: card.name,
               date: formatDate(action.date),
               progress,
-              done,
+              done
             };
 
             actionLists.push(d);
@@ -216,7 +248,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
     .then(([actionList, todoList]) => {
       const data = [
         ...actionList.map(({ data }) => data).sort(sortByItemName),
-        ...todoList.map(({ data }) => data).sort(sortByItemName),
+        ...todoList.map(({ data }) => data).sort(sortByItemName)
       ];
       console.log("writing data to output.csv");
       writeJsonToCsv(data, "./output.csv");
