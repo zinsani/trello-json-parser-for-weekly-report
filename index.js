@@ -101,6 +101,15 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
           for (const card of allCards) {
             if (!card.idChecklists.length) continue;
 
+            const { data: list } = await axios.get(
+              `${url}/lists/${card.idList}?${sufix}`
+            );
+            if (list.name.toLowerCase().startsWith("how to use")) continue;
+
+            const { data: members } = await axios.get(
+              `${url}/cards/${card.id}/members?${sufix}`
+            );
+
             const { data: checklists } = await axios.get(
               `${url}/cards/${card.id}/checklists?${sufix}`
             );
@@ -127,13 +136,6 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               continue;
             }
 
-            const { data: list } = await axios.get(
-              `${url}/lists/${card.idList}?${sufix}`
-            );
-            const { data: members } = await axios.get(
-              `${url}/cards/${card.id}/members?${sufix}`
-            );
-
             const todos = matchingCheckLists
               .map(cl => ({
                 project: list.name,
@@ -141,7 +143,10 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                 member: members.map(m => m.fullName).join(", "),
                 date: formatDate(today.toISOString()),
                 todo:
-                  `[${cl.name.replace(/^\s?todo\s?/i, "\n")}]\n` +
+                  `[${cl.name.replace(/^\s?todo\s?-?\s?/i, "")}]\n`.replace(
+                    "[]\n",
+                    ""
+                  ) +
                   cl.checkItems
                     .filter(c => c.state !== "complete")
                     .filter(c => !c.name.startsWith("---"))
