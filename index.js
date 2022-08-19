@@ -26,7 +26,7 @@ function formatDate(dateString) {
 
 function writeJsonToCsv(actions, csvFile) {
   const options = {
-    headers: ["project", "member", "item", "progress", "date", "done", "todo"]
+    headers: ["project", "member", "item", "progress", "date", "done", "todo"],
   };
 
   jsonexport(actions, options, (err, csv) => {
@@ -36,7 +36,7 @@ function writeJsonToCsv(actions, csvFile) {
 
 const readline = require("readline").createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdout,
 });
 
 readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
@@ -152,13 +152,13 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                     .filter(c => !c.name.startsWith("---"))
                     .filter(c => !c.name.startsWith("==="))
                     .map(c => `→ ${c.name}`)
-                    .join("\n")
+                    .join("\n"),
               }))
               .filter(({ todo }) => !!todo);
 
             todosPerCards = [
               ...todosPerCards,
-              ...todos.filter(t => t.todo.length > 1)
+              ...todos.filter(t => t.todo.length > 1),
             ];
           }
           console.log("todosPerCards", todosPerCards);
@@ -230,7 +230,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               item: card.name,
               date: formatDate(action.date),
               progress,
-              done
+              done,
             };
 
             actionLists.push(d);
@@ -239,7 +239,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
         } catch (e) {
           /* handle error */
           console.error(e);
-          return null;
+          continue;
         }
       }
 
@@ -253,7 +253,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
     .then(([actionList, todoList]) => {
       const data = [
         ...actionList.map(({ data }) => data).sort(sortByItemName),
-        ...todoList.map(({ data }) => data).sort(sortByItemName)
+        ...todoList.map(({ data }) => data).sort(sortByItemName),
       ];
       console.log("writing data to output.csv");
       writeJsonToCsv(data, "./output.csv");
