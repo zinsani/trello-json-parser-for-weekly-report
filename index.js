@@ -26,7 +26,16 @@ function formatDate(dateString) {
 
 function writeJsonToCsv(actions, csvFile) {
   const options = {
-    headers: ["project", "member", "item", "progress", "date", "done", "todo"],
+    headers: [
+      "project",
+      "member",
+      "item",
+      "progress",
+      "date",
+      "done",
+      "todo",
+      "additionalRate",
+    ],
   };
 
   jsonexport(actions, options, (err, csv) => {
@@ -59,7 +68,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
   );
 
   const url = "https://api.trello.com/1";
-  const actionTypes = ["commentCard", "updateCheckItemStateOnCard"];
+  const actionTypes = ["updateCheckItemStateOnCard" /*, "commentCard" */];
   const key = process.env.key;
   const token = process.env.token;
   if (!key || !token) {
@@ -68,6 +77,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
     return;
   }
   const sufix = `key=${key}&token=${token}`;
+  const filterOutLabels = ["canceled", "pending", "done"];
 
   axios
     .get(`${url}/members/me/boards?fields=name,url&` + sufix)
@@ -92,14 +102,25 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
       console.log("Getting todolists");
       for (const { name, id } of boardData) {
         console.log("fetching all cards of board ", name);
+        let todosPerCards = [];
         try {
           const { data: allCards } = await axios.get(
             `${url}/boards/${id}/cards?filter=open&${sufix}`
           );
           console.log("all cards count", allCards.length);
-          let todosPerCards = [];
           for (const card of allCards) {
-            if (!card.idChecklists.length) continue;
+            console.log(
+              `==== card.name: ${card.name} labels: ${card.labels
+                .map(l => l.name)
+                .join(", ")} ====`
+            );
+            if (
+              !card.idChecklists.length ||
+              card.labels.filter(l =>
+                filterOutLabels.includes(l.name.toLowerCase())
+              ).length > 0
+            )
+              continue;
 
             const { data: list } = await axios.get(
               `${url}/lists/${card.idList}?${sufix}`
@@ -114,45 +135,41 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               `${url}/cards/${card.id}/checklists?${sufix}`
             );
 
-            console.log("checklists of card", card.name, checklists);
-
-            const matchingCheckLists = checklists.filter(cl =>
-              cl.name.toLowerCase().replace(" ", "").startsWith("todo")
+            const mainCheckLists = checklists.filter(cl =>
+              cl.name.toLowerCase().replace(" ", "").startsWith("main")
             );
-            if (!matchingCheckLists.length) {
+            if (!mainCheckLists.length) {
               console.log("no todo-list found");
               continue;
             }
-            if (
-              matchingCheckLists
-                .map(
-                  cl =>
-                    cl.checkItems.filter(ci => ci.state !== "complete").length >
-                    0
-                )
-                .filter(x => !!x).length === 0
-            ) {
-              console.log("no completed checklist found");
-              continue;
-            }
 
-            const todos = matchingCheckLists
+            const todos = mainCheckLists
               .map(cl => ({
                 project: list.name,
                 item: card.name,
                 member: members.map(m => m.fullName).join(", "),
                 date: formatDate(today.toISOString()),
-                todo:
-                  `[${cl.name.replace(/^\s?todo\s?-?\s?/i, "")}]\n`.replace(
-                    "[]\n",
-                    ""
-                  ) +
-                  cl.checkItems
-                    .filter(c => c.state !== "complete")
-                    .filter(c => !c.name.startsWith("---"))
-                    .filter(c => !c.name.startsWith("==="))
-                    .map(c => `→ ${c.name}`)
-                    .join("\n"),
+                progress:
+                  Math.round(
+                    (cl.checkItems.filter(ci => ci.state === "complete")
+                      .length /
+                      cl.checkItems.filter(ci => !ci.name.startsWith("+"))
+                        .length) *
+                      100
+                  ) / 100,
+                additionalRate:
+                  Math.round(
+                    (cl.checkItems.filter(ci => ci.name.startsWith("+"))
+                      .length /
+                      cl.checkItems.length) *
+                      100
+                  ) / 100,
+                todo: cl.checkItems
+                  .filter(c => c.state !== "complete")
+                  .filter(c => !c.name.startsWith("---"))
+                  .filter(c => !c.name.startsWith("==="))
+                  .map(c => `→ ${c.name}`)
+                  .join("\n"),
               }))
               .filter(({ todo }) => !!todo);
 
@@ -194,13 +211,14 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
             const { data: list } = await axios.get(
               `${url}/cards/${card.id}/list?${sufix}`
             );
-            const { data: checklist } = await axios.get(
-              `${url}/cards/${card.id}/checklists?${sufix}`
-            );
             const { data: member } = await axios.get(
               `${url}/actions/${action.id}/memberCreator?${sufix}`
             );
 
+            /*
+            const { data: checklist } = await axios.get(
+              `${url}/cards/${card.id}/checklists?${sufix}`
+            );
             if (!checklist) {
               console.log("no checklist found");
               continue;
@@ -223,14 +241,22 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               action.type === "commentCard"
                 ? action.data.text
                 : "✓ " + action.data.checkItem.name;
+            */
+
+            const matchingTodoData = todosPerCards.filter(
+              d => d.item === card.name
+            );
+
+            const progress =
+              matchingTodoData.length > 0 ? matchingTodoData[0].progress : 0.0;
 
             const d = {
               project: list.name,
               member: member.fullName,
               item: card.name,
-              date: formatDate(action.date),
               progress,
-              done,
+              date: formatDate(action.date),
+              done: "✓ " + action.data.checkItem.name,
             };
 
             actionLists.push(d);
