@@ -33,7 +33,7 @@ function writeJsonToCsv(actions, csvFile) {
       "progress",
       "date",
       "done",
-      "todo",
+      "todos",
       "additionalRate",
     ],
   };
@@ -135,48 +135,102 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               `${url}/cards/${card.id}/checklists?${sufix}`
             );
 
-            const mainCheckLists = checklists.filter(cl =>
-              cl.name.toLowerCase().replace(" ", "").startsWith("main")
-            );
-            if (!mainCheckLists.length) {
-              console.log("no todo-list found");
-              continue;
-            }
+            const checklistItemsFilter = c =>
+              !c.name.trim().startsWith("---") &&
+              !c.name.trim().startsWith("===");
 
-            const todos = mainCheckLists
+            const mainCheckLists = checklists
+              .filter(cl => cl.name.toLowerCase().trim().startsWith("main"))
               .map(cl => ({
-                project: list.name,
-                item: card.name,
-                member: members.map(m => m.fullName).join(", "),
-                date: formatDate(today.toISOString()),
-                progress:
-                  Math.round(
-                    (cl.checkItems.filter(ci => ci.state === "complete")
-                      .length /
-                      cl.checkItems.filter(ci => !ci.name.startsWith("+"))
-                        .length) *
-                      100
-                  ) / 100,
-                additionalRate:
-                  Math.round(
-                    (cl.checkItems.filter(ci => ci.name.startsWith("+"))
-                      .length /
-                      cl.checkItems.length) *
-                      100
-                  ) / 100,
-                todo: cl.checkItems
-                  .filter(c => c.state !== "complete")
-                  .filter(c => !c.name.startsWith("---"))
-                  .filter(c => !c.name.startsWith("==="))
-                  .map(c => `→ ${c.name}`)
-                  .join("\n"),
-              }))
-              .filter(({ todo }) => !!todo);
+                ...cl,
+                checkItems: cl.checkItems.filter(checklistItemsFilter),
+              }));
 
-            todosPerCards = [
-              ...todosPerCards,
-              ...todos.filter(t => t.todo.length > 1),
-            ];
+            let todoCheckLists = [];
+            if (!mainCheckLists.length) {
+              console.log(
+                "no todo-list found in main checkItems. getting from todo-list..."
+              );
+              todoCheckLists = checklists
+                .filter(cl => cl.name.trim().toLowerCase().startsWith("todo"))
+                .map(cl => ({
+                  ...cl,
+                  checkItems: cl.checkItems.filter(checklistItemsFilter),
+                }));
+              if (!todoCheckLists.length) continue;
+              console.log(
+                todoCheckLists.reduce((a, x) => a + x.checkItems.length, 0),
+                " todo-list found in todo-list checkItems"
+              );
+            } else
+              console.log(
+                mainCheckLists.reduce((a, x) => a + x.checkItems.length, 0),
+                " todo-list found in main-list checkItems"
+              );
+
+            const checkListItemsCount = [...mainCheckLists, ...todoCheckLists]
+              .map(cl => cl.checkItems)
+              .reduce(
+                (acc, checkItems) => ({
+                  completed:
+                    acc.completed +
+                    checkItems.filter(ci => ci.state === "complete").length,
+                  total: acc.total + checkItems.length,
+                  additional:
+                    acc.additional +
+                    checkItems.filter(ci => ci.name.trim().startsWith("+"))
+                      .length,
+                }),
+                {
+                  completed: 0,
+                  total: 0,
+                  additional: 0,
+                }
+              );
+
+            const progress =
+              Math.round(
+                (checkListItemsCount.completed / checkListItemsCount.total) *
+                  100
+              ) / 100;
+            const additionalRate =
+              Math.round(
+                (checkListItemsCount.additional / checkListItemsCount.total) *
+                  100
+              ) / 100;
+
+            console.log(
+              `\t${card.name} progress: ${progress * 100}% <- ${
+                checkListItemsCount.completed
+              }/${checkListItemsCount.total} (+${additionalRate}% <- ${
+                checkListItemsCount.additional
+              })`
+            );
+
+            const todoItem = [...mainCheckLists, ...todoCheckLists]
+              .map(cl => cl.checkItems.filter(c => c.state !== "complete"))
+              .reduce(
+                (acc, checkItems) => ({
+                  ...acc,
+                  todos: [...acc.todos, ...checkItems],
+                }),
+                {
+                  project: list.name,
+                  item: card.name,
+                  member: members.map(m => m.fullName).join(", "),
+                  date: formatDate(today.toISOString()),
+                  progress,
+                  additionalRate,
+                  todos: [],
+                }
+              );
+
+            todoItem.todos = todoItem.todos
+              .sort((a, b) => (a.name > b.name ? 1 : -1))
+              .map(c => `→ ${c.name}`)
+              .join("\n");
+
+            todosPerCards.push(todoItem);
           }
           console.log("todosPerCards", todosPerCards);
           allTodoLists.push({ board: name, data: todosPerCards });
