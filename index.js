@@ -43,6 +43,45 @@ function writeJsonToCsv(actions, csvFile) {
   });
 }
 
+function reduceActionsAsSummary(acc, data) {
+  const existingDataIndex = acc.findIndex(
+    (d) => d.project === data.project && d.item === data.item
+  );
+  if (existingDataIndex > -1) {
+    const prevDone = (acc[existingDataIndex].done ?? "") + "\n";
+    acc[existingDataIndex].done = prevDone + data.done;
+  } else {
+    acc.push(data);
+  }
+  return acc;
+}
+
+function reduceTodosOnActions(actions, todoData) {
+  const existingActionIndex = actions.findIndex(
+    (d) => d.project === todoData.project && d.item === todoData.item
+  );
+
+  if (existingActionIndex > -1) {
+    actions[existingActionIndex].date = todoData.date;
+    const prevTodos = (actions[existingActionIndex].todos ?? "") + "\n";
+    actions[existingActionIndex].todos = prevTodos + todoData.todos;
+  } else {
+    actions.push(todoData);
+  }
+  return actions;
+}
+
+const mapTitleAndProgress = (prop) => (data) => {
+  const title = `[${data.item}]  진행률 ${
+    isNaN(data.progress) ? 0 : data.progress * 100
+  }% `;
+  console.log("mapTitleAndProgress", prop, data[prop]);
+  if (data[prop] && !data[prop]?.includes(title)) {
+    data[prop] = title + "\n" + (data[prop] ?? "");
+  }
+  return data;
+};
+
 const readline = require("readline").createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -217,6 +256,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                   todos: [...acc.todos, ...checkItems],
                 }),
                 {
+                  board: name,
                   project: list.name,
                   item: card.name,
                   member: members.map((m) => m.fullName).join(", "),
@@ -271,34 +311,6 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               `${url}/actions/${action.id}/memberCreator?${sufix}`
             );
 
-            /*
-						const { data: checklist } = await axios.get(
-							`${url}/cards/${card.id}/checklists?${sufix}`
-						);
-						if (!checklist) {
-							console.log("no checklist found");
-							continue;
-						}
-
-						const mainCheckList = checklist.find(c =>
-							c.name.toLowerCase().startsWith("main")
-						);
-
-						const progress = mainCheckList?.checkItems
-							? Math.round(
-									(mainCheckList.checkItems.filter(c => c.state === "complete")
-										.length /
-										mainCheckList.checkItems.length) *
-										100
-								) / 100
-							: undefined;
-
-						const done =
-							action.type === "commentCard"
-								? action.data.text
-								: "✓ " + action.data.checkItem.name;
-						*/
-
             const matchingTodoData = todosPerCards.filter(
               (d) => d.item === card.name
             );
@@ -307,6 +319,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
               matchingTodoData.length > 0 ? matchingTodoData[0].progress : 0.0;
 
             const d = {
+              board: name,
               project: list.name,
               member: member.fullName,
               item: card.name,
@@ -317,7 +330,10 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
 
             actionLists.push(d);
           }
-          allActionLists.push({ board: name, data: actionLists });
+          allActionLists.push({
+            board: name,
+            data: actionLists,
+          });
         } catch (e) {
           /* handle error */
           console.error(e);
@@ -332,13 +348,32 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
       console.log("=============================");
       return [allActionLists, allTodoLists];
     })
-    .then(([actionList, todoList]) => {
-      const data = [
-        ...actionList.map(({ data }) => data).sort(sortByItemName),
-        ...todoList.map(({ data }) => data).sort(sortByItemName),
-      ];
+    .then(([doneList, todoList]) => {
+      const output = [
+        ...doneList.map(({ data }) => data),
+        ...todoList.map(({ data }) => data),
+      ].sort(sortByItemName);
       console.log("writing data to output.csv");
-      writeJsonToCsv(data, "./output.csv");
+      writeJsonToCsv(output, "./output.csv");
+
+      const doneListReduced = doneList
+        .reduce((a, { data }) => [...a, ...data], [])
+        .reduce(reduceActionsAsSummary, [])
+        .map(mapTitleAndProgress("done"));
+
+      console.log("doneListReduced", doneListReduced);
+
+      const outputOfSummary = [
+        ...todoList.map(({ board, data }) =>
+          data
+            .reduce(reduceTodosOnActions, [
+              ...doneListReduced.filter((a) => a.board === board),
+            ])
+            .map(mapTitleAndProgress("todos"))
+        ),
+      ].sort(sortByItemName);
+
+      writeJsonToCsv(outputOfSummary, "./output-summary.csv");
       console.log("completed!");
       console.log("=============================");
     })
