@@ -71,16 +71,18 @@ function reduceTodosOnActions(actions, todoData) {
   return actions;
 }
 
-const mapTitleAndProgress = (prop) => (data) => {
-  const title = `[${data.item}]  진행률 ${
-    isNaN(data.progress) ? 0 : data.progress * 100
-  }% `;
-  console.log("mapTitleAndProgress", prop, data[prop]);
-  if (data[prop] && !data[prop]?.includes(title)) {
-    data[prop] = title + "\n" + (data[prop] ?? "");
-  }
-  return data;
-};
+const mapTitleAndProgress =
+  (prop, showProgress = true) =>
+  (data) => {
+    let title = `[${data.item.replace(/P\d+ /, "")}]`;
+    if (showProgress)
+      title += `진행률 ${isNaN(data.progress) ? 0 : data.progress * 100}% `;
+
+    if (data[prop] && !data[prop]?.includes(title)) {
+      data[prop] = title + "\n" + (data[prop] ?? "");
+    }
+    return data;
+  };
 
 const readline = require("readline").createInterface({
   input: process.stdin,
@@ -121,11 +123,6 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
   axios
     .get(`${url}/members/me/boards?fields=name,url&` + sufix)
     .then(async (res) => {
-      console.log(
-        "all boards",
-        res.data.map((x) => x.name)
-      );
-
       const boardData = res.data.filter((b) =>
         ["newmedia.projects", "newmedia.r&d"].includes(b.name.toLowerCase())
       );
@@ -187,7 +184,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
 
             let todoCheckLists = [];
             if (!mainCheckLists.length) {
-              console.log(
+              console.warn(
                 "no todo-list found in main checkItems. getting from todo-list..."
               );
             } else {
@@ -274,7 +271,6 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
 
             todosPerCards.push(todoItem);
           }
-          console.log("todosPerCards", todosPerCards);
           allTodoLists.push({ board: name, data: todosPerCards });
         } catch (e) {
           /* handle error */
@@ -298,18 +294,17 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
                 : true
             )) {
             console.log(
+              action.data.card.name,
               "parsing action of type",
-              action.type,
-              " and of card ",
-              action.data.card.name
+              action.type
             );
             const card = action.data.card;
             const { data: list } = await axios.get(
               `${url}/cards/${card.id}/list?${sufix}`
             );
-            const { data: member } = await axios.get(
-              `${url}/actions/${action.id}/memberCreator?${sufix}`
-            );
+            // const { data: member } = await axios.get(
+            //   `${url}/actions/${action.id}/memberCreator?${sufix}`
+            // );
 
             const matchingTodoData = todosPerCards.filter(
               (d) => d.item === card.name
@@ -321,7 +316,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
             const d = {
               board: name,
               project: list.name,
-              member: member.fullName,
+              member: action.memberCreator.fullName,
               item: card.name,
               progress,
               date: formatDate(action.date),
@@ -341,11 +336,6 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
         }
       }
 
-      console.log("=============================");
-      console.log("allTodoLists", allTodoLists);
-      console.log("=============================");
-      console.log("allActionLists", allActionLists);
-      console.log("=============================");
       return [allActionLists, allTodoLists];
     })
     .then(([doneList, todoList]) => {
@@ -359,9 +349,7 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
       const doneListReduced = doneList
         .reduce((a, { data }) => [...a, ...data], [])
         .reduce(reduceActionsAsSummary, [])
-        .map(mapTitleAndProgress("done"));
-
-      console.log("doneListReduced", doneListReduced);
+        .map(mapTitleAndProgress("done", false));
 
       const outputOfSummary = [
         ...todoList.map(({ board, data }) =>
@@ -373,9 +361,11 @@ readline.question("Input day offset. (default: 7)", (offsetDate = "7") => {
         ),
       ].sort(sortByItemName);
 
+      console.log("writing summary data to output-summary.csv");
       writeJsonToCsv(outputOfSummary, "./output-summary.csv");
-      console.log("completed!");
+
       console.log("=============================");
+      console.log("FINISHED");
     })
     .catch(console.error);
 
